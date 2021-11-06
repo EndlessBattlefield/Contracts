@@ -1,4 +1,8 @@
-
+/**
+ * EBMetaverse 
+ * https://twitter.com/EBMetaverse
+ * https://www.youtube.com/c/ebmetaverse
+ */
 pragma solidity >=0.6.0 <0.8.0;
  
 /**
@@ -467,6 +471,4 @@ contract EBToken is Pausable, StandardToken, BlackList {
     // Called when contract is deprecated
     event Deprecate(address newAddress);
  
-    // Called if contract ever adds fees
-    event Params(uint feeBasisPoints, uint maxFee);
 }
