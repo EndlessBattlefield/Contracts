@@ -116,9 +116,9 @@ contract Ownable {
  */
 abstract contract ERC20Basic {
     
-    function totalSupply() external virtual view returns (uint);
-    function balanceOf(address who) external virtual view returns (uint);
-    function transfer(address to, uint value) external virtual;
+    function totalSupply() external virtual view returns (uint256);
+    function balanceOf(address who) external virtual view returns (uint256);
+    function transfer(address to, uint value) external virtual returns (bool);
     event Transfer(address indexed from, address indexed to, uint value);
 }
  
@@ -127,9 +127,9 @@ abstract contract ERC20Basic {
  * @dev see https://github.com/ethereum/EIPs/issues/20
  */
 abstract contract ERC20 is ERC20Basic {
-    function allowance(address owner, address spender) external virtual view returns (uint);
-    function transferFrom(address from, address to, uint value) external virtual;
-    function approve(address spender, uint value) external virtual;
+    function allowance(address owner, address spender) external virtual view returns (uint256);
+    function transferFrom(address from, address to, uint value) external virtual returns (bool);
+    function approve(address spender, uint value) external virtual returns (bool);
     event Approval(address indexed owner, address indexed spender, uint value);
 }
  
@@ -154,16 +154,17 @@ abstract contract BasicToken is Ownable, ERC20Basic {
     }
  
     
-    function transfer(address _to, uint _value) public virtual override onlyPayloadSize(2 * 32) {
+    function transfer(address _to, uint _value) public virtual override onlyPayloadSize(2 * 32) returns (bool){
         require(_to != address(0),"ERC20: transfer from the zero address");
         balances[msg.sender] = balances[msg.sender].sub(_value,"ERC20: transfer amount exceeds balance");
         balances[_to] = balances[_to].add(_value);
 
         emit Transfer(msg.sender, _to, _value);
+        return true;
     }
  
    
-    function balanceOf(address _owner) public virtual override view returns (uint balance) {
+    function balanceOf(address _owner) public virtual override view returns (uint256 balance) {
         return balances[_owner];
     }
  
@@ -188,7 +189,7 @@ abstract contract StandardToken is BasicToken, ERC20 {
     * @param _to address The address which you want to transfer to
     * @param _value uint the amount of tokens to be transferred
     */
-    function transferFrom(address _from, address _to, uint _value) public virtual override onlyPayloadSize(3 * 32) {
+    function transferFrom(address _from, address _to, uint _value) public virtual override onlyPayloadSize(3 * 32) returns (bool){
         uint256 _allowance = allowed[_from][msg.sender];
  
         if (_allowance < MAX_UINT) {
@@ -198,10 +199,11 @@ abstract contract StandardToken is BasicToken, ERC20 {
         balances[_to] = balances[_to].add(_value);
  
         emit Transfer(_from, _to, _value);
+        return true;
     }
  
     
-    function approve(address _spender, uint _value) public virtual override onlyPayloadSize(2 * 32) {
+    function approve(address _spender, uint _value) public virtual override onlyPayloadSize(2 * 32) returns (bool){
  
         // To change the approve amount you first have to reduce the addresses`
         //  allowance to zero by calling `approve(_spender, 0)` if it is not
@@ -211,10 +213,11 @@ abstract contract StandardToken is BasicToken, ERC20 {
  
         allowed[msg.sender][_spender] = _value;
         emit Approval(msg.sender, _spender, _value);
+        return true;
     }
  
    
-    function allowance(address _owner, address _spender) public virtual override view returns (uint remaining) {
+    function allowance(address _owner, address _spender) public virtual override view returns (uint256 remaining) {
         return allowed[_owner][_spender];
     }
     
@@ -349,7 +352,7 @@ contract EBCToken is Pausable, StandardToken, BlackList,Roles {
         
     }
   
-    function transfer(address _to, uint _value) public override whenNotPaused {
+    function transfer(address _to, uint _value) public override whenNotPaused returns (bool){
         require(!isBlackListed[msg.sender],"Address locked");
         
         require(balances[msg.sender] >= _value && balances[_to] + _value > balances[_to]);
@@ -358,7 +361,7 @@ contract EBCToken is Pausable, StandardToken, BlackList,Roles {
         
     }
  
-    function transferFrom(address _from, address _to, uint _value) public override whenNotPaused {
+    function transferFrom(address _from, address _to, uint _value) public override whenNotPaused returns (bool){
         require(!isBlackListed[_from],"Address locked");
         
         require(balances[_from] >= _value && allowed[_from][msg.sender] >= _value && balances[_to] + _value > balances[_to]);
@@ -367,26 +370,26 @@ contract EBCToken is Pausable, StandardToken, BlackList,Roles {
         
     }
  
-    function balanceOf(address who) public view override returns (uint) {
+    function balanceOf(address who) public view override returns (uint256) {
         
         return super.balanceOf(who);
         
     }
  
-    function approve(address _spender, uint _value) public override onlyPayloadSize(2 * 32) {
+    function approve(address _spender, uint _value) public override whenNotPaused returns (bool) {
         
         return super.approve(_spender, _value);
     
     }
  
-    function allowance(address _owner, address _spender) public view override returns (uint remaining) {
+    function allowance(address _owner, address _spender) public view override returns (uint256 remaining) {
         
         return super.allowance(_owner, _spender);
         
     }
 
  
-    function totalSupply() public view override returns (uint) {
+    function totalSupply() public view override returns (uint256) {
         
         return _totalSupply;
         
