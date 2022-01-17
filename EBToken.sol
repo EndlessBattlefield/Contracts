@@ -1,14 +1,14 @@
+// SPDX-License-Identifier: MIT
 /**
- * EBMetaverse 
+ * Endless Battlefield Metaverse Token
+ * https://ebgame.io
+ * https://github.com/EndlessBattlefield
  * https://twitter.com/EBMetaverse
  * https://www.youtube.com/c/ebmetaverse
  */
 pragma solidity >=0.6.0 <0.8.0;
  
-/**
- * @title SafeMath
- * @dev Math operations with safety checks that throw on error
- */
+
 library SafeMath {
     function add(uint256 a, uint256 b) internal pure returns (uint256) {
         uint256 c = a + b;
@@ -59,6 +59,17 @@ library SafeMath {
         return a % b;
     }
 }
+
+abstract contract Context {
+    function _msgSender() internal view virtual returns (address payable) {
+        return msg.sender;
+    }
+
+    function _msgData() internal view virtual returns (bytes memory) {
+        this; // silence state mutability warning without generating bytecode - see https://github.com/ethereum/solidity/issues/2691
+        return msg.data;
+    }
+}
  
 /**
  * @title Ownable
@@ -103,9 +114,9 @@ contract Ownable {
  */
 abstract contract ERC20Basic {
     
-    function totalSupply() external virtual view returns (uint);
-    function balanceOf(address who) external virtual view returns (uint);
-    function transfer(address to, uint value) external virtual;
+    function totalSupply() external virtual view returns (uint256);
+    function balanceOf(address who) external virtual view returns (uint256);
+    function transfer(address to, uint value) external virtual returns (bool);
     event Transfer(address indexed from, address indexed to, uint value);
 }
  
@@ -114,9 +125,9 @@ abstract contract ERC20Basic {
  * @dev see https://github.com/ethereum/EIPs/issues/20
  */
 abstract contract ERC20 is ERC20Basic {
-    function allowance(address owner, address spender) external virtual view returns (uint);
-    function transferFrom(address from, address to, uint value) external virtual;
-    function approve(address spender, uint value) external virtual;
+    function allowance(address owner, address spender) external virtual view returns (uint256);
+    function transferFrom(address from, address to, uint value) external virtual returns (bool);
+    function approve(address spender, uint value) external virtual returns (bool);
     event Approval(address indexed owner, address indexed spender, uint value);
 }
  
@@ -136,21 +147,22 @@ abstract contract BasicToken is Ownable, ERC20Basic {
     * @dev Fix for the ERC20 short address attack.
     */
     modifier onlyPayloadSize(uint size) {
-        require(!(msg.data.length < size + 4));
+        require(!(msg.data.length < size + 4),"Fix for the ERC20 short address attack");
         _;
     }
  
     
-    function transfer(address _to, uint _value) public virtual override onlyPayloadSize(2 * 32) {
+    function transfer(address _to, uint _value) public virtual override onlyPayloadSize(2 * 32) returns (bool){
         require(_to != address(0),"ERC20: transfer from the zero address");
         balances[msg.sender] = balances[msg.sender].sub(_value,"ERC20: transfer amount exceeds balance");
         balances[_to] = balances[_to].add(_value);
 
         emit Transfer(msg.sender, _to, _value);
+        return true;
     }
  
    
-    function balanceOf(address _owner) public virtual override view returns (uint balance) {
+    function balanceOf(address _owner) public virtual override view returns (uint256 balance) {
         return balances[_owner];
     }
  
@@ -175,7 +187,7 @@ abstract contract StandardToken is BasicToken, ERC20 {
     * @param _to address The address which you want to transfer to
     * @param _value uint the amount of tokens to be transferred
     */
-    function transferFrom(address _from, address _to, uint _value) public virtual override onlyPayloadSize(3 * 32) {
+    function transferFrom(address _from, address _to, uint _value) public virtual override onlyPayloadSize(3 * 32) returns (bool){
         uint256 _allowance = allowed[_from][msg.sender];
  
         if (_allowance < MAX_UINT) {
@@ -185,10 +197,12 @@ abstract contract StandardToken is BasicToken, ERC20 {
         balances[_to] = balances[_to].add(_value);
  
         emit Transfer(_from, _to, _value);
+
+        return true;
     }
  
     
-    function approve(address _spender, uint _value) public virtual override onlyPayloadSize(2 * 32) {
+    function approve(address _spender, uint _value) public virtual override onlyPayloadSize(2 * 32) returns (bool){
  
         // To change the approve amount you first have to reduce the addresses`
         //  allowance to zero by calling `approve(_spender, 0)` if it is not
@@ -198,10 +212,11 @@ abstract contract StandardToken is BasicToken, ERC20 {
  
         allowed[msg.sender][_spender] = _value;
         emit Approval(msg.sender, _spender, _value);
+        return true;
     }
  
    
-    function allowance(address _owner, address _spender) public virtual override view returns (uint remaining) {
+    function allowance(address _owner, address _spender) public virtual override view returns (uint256 remaining) {
         return allowed[_owner][_spender];
     }
  
@@ -291,25 +306,41 @@ abstract contract BlackList is Ownable, BasicToken {
  
 }
  
-abstract contract UpgradedStandardToken is StandardToken{
-    // those methods are called by the legacy contract
-    // and they must ensure msg.sender to be the contract address
-    function transferByLegacy(address from, address to, uint value) public virtual;
-    function transferFromByLegacy(address sender, address from, address spender, uint value) public virtual;
-    function approveByLegacy(address from, address spender, uint value) public virtual;
+
+abstract contract Roles is Ownable,Context{
+    
+    mapping (address => bool) private minterUser;
+    
+    
+    modifier onlyMinter() {
+        require(isMinter(_msgSender()) || owner == _msgSender(), "MinterRole: caller does not have the Minter role or above");
+        _;
+    }
+  
+    
+    function isMinter(address account) public view returns (bool) {
+        return minterUser[account];
+    }
+
+    function addMinter(address account) public onlyOwner{
+        minterUser[account] = true;
+    }
+
+    function removeMinter(address account) public onlyOwner{
+        minterUser[account] = false;
+    }
+    
+    
 }
- 
-contract EBToken is Pausable, StandardToken, BlackList {
+
+contract EBToken is Pausable, StandardToken, BlackList,Roles {
  
     string public name;
     string public symbol;
     uint public decimals;
-    address public upgradedAddress;
-    bool public deprecated;
-
-    mapping(address => uint256) timestamp;        //Each address corresponds to a timestamp.
-    mapping(address => uint256) distBalances;     //list of distributed balance of each address to calculate restricted amount
-    uint public baseStartTime;                    //All other time spots are calculated based on this time spot.
+ 
+    mapping(address => uint256) timestamp; 
+    mapping(address => uint256) distBalances;
     mapping(address => uint256) unlockNum;
 
     uint256 public total;
@@ -322,18 +353,13 @@ contract EBToken is Pausable, StandardToken, BlackList {
         decimals = 18;
         _totalSupply = 0;
         total = 1000000000 * (10 ** uint256(decimals));
-        deprecated = false;
-        baseStartTime = block.timestamp;
-    }
-
-    function setStartTime(uint _startTime) public onlyOwner {
-            baseStartTime = _startTime;
+        
     }
 
 
     function distribute(uint256 _amount, address _to, uint256 _unlockNum, uint256 _startTime) public onlyOwner {
             
-        require((_to == owner) || ((_to != owner) && (distBalances[_to] == 0))); //每个账号只能分发一次
+        require((_to == owner) || ((_to != owner) && (distBalances[_to] == 0))); 
  
         require(_totalSupply + _amount >= _totalSupply);
         require(_totalSupply + _amount <= total,"Exceeding the maximum limit");
@@ -342,63 +368,53 @@ contract EBToken is Pausable, StandardToken, BlackList {
         balances[_to] = balances[_to].add(_amount);
         distBalances[_to] = distBalances[_to].add(_amount);
         unlockNum[_to] = unlockNum[_to].add(_unlockNum);
-        timestamp[_to] = _startTime > 0 ? _startTime : block.timestamp;                        //分发的时候记录时间戳，用于计算freeAmount
+        timestamp[_to] = _startTime > 0 ? _startTime : block.timestamp;
  
     }
 
-    // Forward ERC20 methods to upgraded contract if this one is deprecated
-    function transfer(address _to, uint _value) public override whenNotPaused {
-        require(!isBlackListed[msg.sender]);
-        if (deprecated) {
-            return UpgradedStandardToken(upgradedAddress).transferByLegacy(msg.sender, _to, _value);
-        } else {
-            require(now > baseStartTime,"Less than unlock time");
-            require(balances[msg.sender] >= _value && balances[_to] + _value > balances[_to]);
-            uint _freeAmount = freeAmount(msg.sender);
-            require(_freeAmount >= _value);
+    
+    function transfer(address _to, uint _value) public override whenNotPaused returns (bool){
+        require(!isBlackListed[msg.sender],"Address locked");
+        
+        require(balances[msg.sender] >= _value && balances[_to] + _value > balances[_to]);
+        uint _freeAmount = freeAmount(msg.sender);
+        require(_freeAmount >= _value);
             
-            return super.transfer(_to, _value);
-        }
+        return super.transfer(_to, _value);
+        
     }
  
-    // Forward ERC20 methods to upgraded contract if this one is deprecated
-    function transferFrom(address _from, address _to, uint _value) public override whenNotPaused {
-        require(!isBlackListed[_from]);
-        if (deprecated) {
-            return UpgradedStandardToken(upgradedAddress).transferFromByLegacy(msg.sender, _from, _to, _value);
-        } else {
-            require(balances[_from] >= _value && allowed[_from][msg.sender] >= _value && balances[_to] + _value > balances[_to]);
-            uint _freeAmount = freeAmount(msg.sender);
-            require(_freeAmount >= _value);
-            return super.transferFrom(_from, _to, _value);
-        }
+    
+    function transferFrom(address _from, address _to, uint _value) public override whenNotPaused returns (bool){
+        require(!isBlackListed[_from],"Address locked");
+        
+        require(balances[_from] >= _value && allowed[_from][msg.sender] >= _value && balances[_to] + _value > balances[_to]);
+        uint _freeAmount = freeAmount(_from);
+        require(_freeAmount >= _value);
+
+        return super.transferFrom(_from, _to, _value);
+        
     }
  
-    // Forward ERC20 methods to upgraded contract if this one is deprecated
-    function balanceOf(address who) public view override returns (uint) {
-        if (deprecated) {
-            return UpgradedStandardToken(upgradedAddress).balanceOf(who);
-        } else {
-            return super.balanceOf(who);
-        }
+    
+    function balanceOf(address who) public view override returns (uint256) {
+        
+        return super.balanceOf(who);
+        
     }
  
-    // Forward ERC20 methods to upgraded contract if this one is deprecated
-    function approve(address _spender, uint _value) public override onlyPayloadSize(2 * 32) {
-        if (deprecated) {
-            return UpgradedStandardToken(upgradedAddress).approveByLegacy(msg.sender, _spender, _value);
-        } else {
-            return super.approve(_spender, _value);
-        }
+    
+    function approve(address _spender, uint _value) public override whenNotPaused returns (bool){
+       
+        return super.approve(_spender, _value);
+        
     }
  
-    // Forward ERC20 methods to upgraded contract if this one is deprecated
-    function allowance(address _owner, address _spender) public view override returns (uint remaining) {
-        if (deprecated) {
-            return StandardToken(upgradedAddress).allowance(_owner, _spender);
-        } else {
-            return super.allowance(_owner, _spender);
-        }
+    
+    function allowance(address _owner, address _spender) public view override returns (uint256 remaining) {
+       
+        return super.allowance(_owner, _spender);
+        
     }
 
     function freeAmount(address user) internal view returns (uint256 amount) {
@@ -409,9 +425,6 @@ contract EBToken is Pausable, StandardToken, BlackList {
             return balances[user];
         }
         
-        if (now < baseStartTime) {
-            return 0;
-        }
         
         if (now < timestamp[user]) {
             monthDiff = 0;
@@ -452,23 +465,58 @@ contract EBToken is Pausable, StandardToken, BlackList {
             amount = balances[user] - freeAmount(user);
             return amount;
     }
-    // deprecate current contract in favour of a new one
-    function deprecate(address _upgradedAddress) public onlyOwner {
-        deprecated = true;
-        upgradedAddress = _upgradedAddress;
-        emit Deprecate(_upgradedAddress);
+    
+    function totalSupply() public view override returns (uint256) {
+        
+        return _totalSupply;
+        
     }
- 
-    // deprecate current contract if favour of a new one
-    function totalSupply() public view override returns (uint) {
-        if (deprecated) {
-            return StandardToken(upgradedAddress).totalSupply();
-        } else {
-            return _totalSupply;
+    
+    function mint(address account, uint256 amount) public onlyMinter{
+        require(account != address(0), "ERC20: mint to the zero address");
+
+        _totalSupply = _totalSupply.add(amount);
+        balances[account] = balances[account].add(amount);
+        emit Transfer(address(0), account, amount);
+    }
+    
+    function batchMint(address[] memory accounts,uint256[] memory amounts) public onlyMinter{
+        
+        require(accounts.length == amounts.length , "ERC20: accounts and amounts length mismatch");
+        
+        for(uint i = 0; i < accounts.length; i++){
+             require(accounts[i] != address(0), "ERC20: mint to the zero address");
+             
+            _totalSupply = _totalSupply.add(amounts[i]);
+            balances[accounts[i]] = balances[accounts[i]].add(amounts[i]);
+            emit Transfer(address(0), accounts[i], amounts[i]);
         }
+        
+    }
+
+    
+    function burn(address account, uint256 amount) public onlyMinter{
+        require(account != address(0), "ERC20: burn from the zero address");
+
+        balances[account] = balances[account].sub(amount, "ERC20: burn amount exceeds balance");
+        _totalSupply = _totalSupply.sub(amount);
+        emit Transfer(account, address(0), amount);
     }
  
-    // Called when contract is deprecated
-    event Deprecate(address newAddress);
  
+    function batchBurn(address[] memory accounts,uint256[] memory amounts) public onlyMinter{
+        
+        require(accounts.length == amounts.length , "ERC20: accounts and amounts length mismatch");
+        
+        for(uint i = 0; i < accounts.length; i++){
+             require(accounts[i] != address(0), "ERC20: mint to the zero address");
+             
+            balances[accounts[i]] = balances[accounts[i]].sub(amounts[i], "ERC20: burn amount exceeds balance");
+            _totalSupply = _totalSupply.sub(amounts[i]);
+            emit Transfer(accounts[i], address(0), amounts[i]);
+            
+        }
+        
+    }
+
 }
