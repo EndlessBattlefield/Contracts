@@ -474,7 +474,10 @@ contract EBToken is Pausable, StandardToken, BlackList,Roles {
     
     function mint(address account, uint256 amount) public onlyMinter{
         require(account != address(0), "ERC20: mint to the zero address");
-
+        
+        require(_totalSupply + amount >= _totalSupply);
+        require(_totalSupply + amount <= total,"Exceeding the maximum limit");
+        
         _totalSupply = _totalSupply.add(amount);
         balances[account] = balances[account].add(amount);
         emit Transfer(address(0), account, amount);
@@ -485,8 +488,11 @@ contract EBToken is Pausable, StandardToken, BlackList,Roles {
         require(accounts.length == amounts.length , "ERC20: accounts and amounts length mismatch");
         
         for(uint i = 0; i < accounts.length; i++){
-             require(accounts[i] != address(0), "ERC20: mint to the zero address");
+            require(accounts[i] != address(0), "ERC20: mint to the zero address");
              
+            require(_totalSupply + amounts[i] >= _totalSupply);
+            require(_totalSupply + amounts[i] <= total,"Exceeding the maximum limit");
+            
             _totalSupply = _totalSupply.add(amounts[i]);
             balances[accounts[i]] = balances[accounts[i]].add(amounts[i]);
             emit Transfer(address(0), accounts[i], amounts[i]);
